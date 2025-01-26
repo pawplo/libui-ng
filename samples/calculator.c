@@ -1,9 +1,26 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdbool.h>
+
 #include <ui.h>
 
 uiWindow *mainwin;
+uiLabel *l;
+uiLabel *l_operator;
+
+#define L_LEN_MAX 255
+char l_text[L_LEN_MAX + 1];
+int l_index = 0;
+
+char operator;
+double operands[2];
+bool save_reset = false;
+
+bool last_operator = false;
+bool last_assign = false;
+
+bool has_colon = false;
 
 static int onClosing(uiWindow *w, void *data)
 {
@@ -18,9 +35,93 @@ static int shouldQuit(void *data)
 	return 1;
 }
 
+
+void save_operand(int i)
+{
+    operands[i] = strtod(l_text, NULL);
+    printf("operand[%d] == %lf\n", i, operands[i]);
+}
+
+void save(void)
+{
+	save_operand(1);
+	if (!save_reset) {
+    	save_operand(0);
+		save_reset = true;
+	}
+}
+
+void clear(void)
+{
+	for (int i = 0; i < L_LEN_MAX; i++) {
+		l_text[i] = 0;
+	}
+	l_index = 0;
+	has_colon = false;
+}
+
+void add(char *c)
+{
+	if (l_index == L_LEN_MAX) return;
+	if (*c == ',') {
+		if (has_colon) return;
+		if (l_index == 0) return;
+		has_colon = true;
+	}
+	l_text[l_index] = *(char *)c;
+    l_index++;
+    uiLabelSetText(l, l_text);
+}
+
 static void clicked(uiButton *b, void *c)
 {
-	printf("clicked [%c]\n", *(char *)c);
+	if (*(char *)c == ',' || (*(char *)c >= '0' && *(char *)c <= '9')) {
+		if (last_operator || last_assign) {
+			clear();
+			last_operator = false;
+		    last_assign = false;
+		}
+		add((char *)c);
+		return;
+	}
+
+    switch (*(char *)c) {
+		case '+':
+		case '-':
+		case '*':
+		case '/':
+		    operator = *(char *)c;
+		    if (!last_assign && !last_assign) {
+				save_reset = false;
+    			save();
+			}
+			last_operator = true;
+		    break;
+		case '=':
+		    if (!last_assign && !last_assign) {
+    			save();
+			}
+            clear();
+    		switch (operator) {
+            	case '+':
+    			    operands[0] += operands[1];
+            	    break;
+            	case '-':
+    			    operands[0] -= operands[1];
+            	    break;
+            	case '*':
+    			    operands[0] *= operands[1];
+            	    break;
+            	case '/':
+    			    operands[0] /= operands[1];
+            	    break;
+    		}
+    		printf("value = %lg\n", operands[0]);
+    		sprintf(l_text, "%lg", operands[0]);
+            uiLabelSetText(l, l_text);
+			last_assign = true;
+		    break;
+	}
 }
 
 int main(void)
@@ -30,7 +131,6 @@ int main(void)
 
 	memset(&o, 0, sizeof (uiInitOptions));
 	err = uiInit(&o);
-//	err = uiInit(NULL);
 	if (err != NULL) {
 		fprintf(stderr, "error initializing ui: %s\n", err);
 		uiFreeInitError(err);
@@ -39,100 +139,55 @@ int main(void)
 
 	uiOnShouldQuit(shouldQuit, NULL);
 
+    operator = 'n';
+
 	mainwin = uiNewWindow("libui Histogram Example", 10, 10, 1);
-//	uiWindowSetMargined(mainwin, 1);
+    uiWindowSetPosition(mainwin, 300, 300);
     uiWindowSetResizeable(mainwin, 0);
 
 	uiWindowOnClosing(mainwin, onClosing, NULL);
 
-//    uiWindowOnKey()
-
 	uiBox *vbox = uiNewVerticalBox();
-//	uiBoxSetPadded(vbox, 1);
 	uiWindowSetChild(mainwin, uiControl(vbox));
 
-        uiLabel *l = uiNewLabel("1234567890");
+        l = uiNewLabel("");
 	    uiBoxAppend(vbox, uiControl(l), 1);
 
-	    uiBox *hbox = uiNewHorizontalBox();
-//	    uiBoxSetPadded(hbox, 1);
-	    uiBoxAppend(vbox, uiControl(hbox), 1);
+#define HBOX(h) \
+	    uiBox *hbox ## h = uiNewHorizontalBox(); \
+	    uiBoxAppend(vbox, uiControl(hbox ## h), 1);
 
-            uiButton *b1 = uiNewButton("1");
-			uiButtonOnClicked(b1, clicked, (void *)"1");
-	        uiBoxAppend(hbox, uiControl(b1), 1);
 
-            uiButton *b2 = uiNewButton("2");
-			uiButtonOnClicked(b2, clicked, (void *)"2");
-	        uiBoxAppend(hbox, uiControl(b2), 1);
+#define BUTTON(h, B, T) \
+            uiButton *b ## B = uiNewButton(T); \
+			uiButtonOnClicked(b ## B, clicked, (void *)T); \
+	        uiBoxAppend(hbox ## h, uiControl(b ## B), 1);
 
-	        uiButton *b3 = uiNewButton("3");
-			uiButtonOnClicked(b3, clicked, (void *)"3");
-	        uiBoxAppend(hbox, uiControl(b3), 1);
+        HBOX(1)
+			BUTTON(1,1,"1")
+			BUTTON(1,2,"2")
+			BUTTON(1,3,"3")
+			BUTTON(1,_plus,"+")
 
-	        uiButton *b_div = uiNewButton("/");
-			uiButtonOnClicked(b_div, clicked, (void *)"/");
-	        uiBoxAppend(hbox, uiControl(b_div), 1);
 
-	    uiBox *hbox2 = uiNewHorizontalBox();
-//	    uiBoxSetPadded(hbox2, 1);
-	    uiBoxAppend(vbox, uiControl(hbox2), 1);
+        HBOX(2)
+			BUTTON(2,4,"1")
+			BUTTON(2,5,"5")
+			BUTTON(2,6,"6")
+			BUTTON(2,_minus,"-")
 
-            uiButton *b4 = uiNewButton("4");
-			uiButtonOnClicked(b4, clicked, (void *)"4");
-	        uiBoxAppend(hbox2, uiControl(b4), 1);
 
-            uiButton *b5 = uiNewButton("5");
-			uiButtonOnClicked(b5, clicked, (void *)"5");
-	        uiBoxAppend(hbox2, uiControl(b5), 1);
+        HBOX(3)
+			BUTTON(3,7,"7")
+			BUTTON(3,8,"8")
+			BUTTON(3,9,"9")
+			BUTTON(3,_mul,"*")
 
-	        uiButton *b6 = uiNewButton("6");
-			uiButtonOnClicked(b6, clicked, (void *)"6");
-	        uiBoxAppend(hbox2, uiControl(b6), 1);
-
-	        uiButton *b_mul = uiNewButton("*");
-			uiButtonOnClicked(b_mul, clicked, (void *)"*");
-	        uiBoxAppend(hbox2, uiControl(b_mul), 1);
-
-	    uiBox *hbox3 = uiNewHorizontalBox();
-//	    uiBoxSetPadded(hbox3, 1);
-	    uiBoxAppend(vbox, uiControl(hbox3), 1);
-
-            uiButton *b7 = uiNewButton("7");
-			uiButtonOnClicked(b7, clicked, (void *)"7");
-	        uiBoxAppend(hbox3, uiControl(b7), 1);
-
-            uiButton *b8 = uiNewButton("8");
-			uiButtonOnClicked(b8, clicked, (void *)"8");
-	        uiBoxAppend(hbox3, uiControl(b8), 1);
-
-	        uiButton *b9 = uiNewButton("9");
-			uiButtonOnClicked(b9, clicked, (void *)"9");
-	        uiBoxAppend(hbox3, uiControl(b9), 1);
-
-	        uiButton *b_plus = uiNewButton("+");
-			uiButtonOnClicked(b_plus, clicked, (void *)"+");
-	        uiBoxAppend(hbox3, uiControl(b_plus), 1);
-
-	    uiBox *hbox4 = uiNewHorizontalBox();
-//	    uiBoxSetPadded(hbox4, 1);
-	    uiBoxAppend(vbox, uiControl(hbox4), 1);
-
-            uiButton *b_colon = uiNewButton(",");
-			uiButtonOnClicked(b_colon, clicked, (void *)",");
-	        uiBoxAppend(hbox4, uiControl(b_colon), 1);
-
-            uiButton *b0 = uiNewButton("0");
-			uiButtonOnClicked(b0, clicked, (void *)"0");
-	        uiBoxAppend(hbox4, uiControl(b0), 1);
-
-	        uiButton *b_assign = uiNewButton("=");
-			uiButtonOnClicked(b_assign, clicked, (void *)"=");
-	        uiBoxAppend(hbox4, uiControl(b_assign), 1);
-
-	        uiButton *b_minus = uiNewButton("-");
-			uiButtonOnClicked(b_minus, clicked, (void *)"-");
-	        uiBoxAppend(hbox4, uiControl(b_minus), 1);
+        HBOX(4)
+			BUTTON(4,_colon,",")
+			BUTTON(4,0,"0")
+			BUTTON(4,_assign,"=")
+			BUTTON(4,_div,"/")
 
 	uiControlShow(uiControl(mainwin));
 	uiMain();
